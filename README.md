@@ -17,6 +17,24 @@ This Web App is a sleek, Netflix-inspired web application that allows users to d
 - **User Management**: Admin interface for creating and managing user accounts
 - **Video Metadata**: Automatically detects video aspect ratio
 
+## 📥 YouTube Download Web App Screenshots
+
+### 🔐 Login Page
+![Login Page](https://github.com/thokzz/YoutubeDownloadWebApp/blob/main/YoutubeDownloadWebApp/assets/YTDownloader%20Login%20Page.png?raw=true)
+
+### 🏠 Main Page
+![Main Page](https://github.com/thokzz/YoutubeDownloadWebApp/blob/main/YoutubeDownloadWebApp/assets/YTDownloader%20Main%20Page.png?raw=true)
+
+### ⬇️ Download Page
+![Download Page](https://github.com/thokzz/YoutubeDownloadWebApp/blob/main/YoutubeDownloadWebApp/assets/YTDownloader%20Download%20Page.png?raw=true)
+
+### 📦 Downloading File
+![Downloading File](https://github.com/thokzz/YoutubeDownloadWebApp/blob/main/YoutubeDownloadWebApp/assets/YTDownloader%20Downloading%20File.png?raw=true)
+
+### 🗂️ Download History
+![Download History](https://github.com/thokzz/YoutubeDownloadWebApp/blob/main/YoutubeDownloadWebApp/assets/YTDownloader%20DL%20History.png?raw=true)
+
+
 ## 🛠️ Technology Stack
 
 - **Frontend**: React, Material-UI, Framer Motion
