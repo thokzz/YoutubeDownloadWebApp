@@ -14,8 +14,6 @@ Download History: Keep track of all past downloads
 User Management: Admin interface for creating and managing user accounts
 Video Metadata: Automatically detects video aspect ratio
 
-Demo
-
 NETFLIXTUBE consists of:
 
 Backend: A Flask (Python) application that handles authentication, video downloading via yt-dlp, and file management
