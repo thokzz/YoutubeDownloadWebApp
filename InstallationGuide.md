@@ -1,4 +1,4 @@
-# NETFLIXTUBE Installation Guide
+# Installation Guide
 
 This guide provides detailed, step-by-step instructions for installing and running the NETFLIXTUBE video downloader application on an Ubuntu Linux system.
 
