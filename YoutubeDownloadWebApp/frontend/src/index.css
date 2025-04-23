@@ -1,0 +1,62 @@
+body {
+  margin: 0;
+  font-family: 'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #141414;
+  color: #fff;
+}
+
+/* Global Netflix-inspired theme */
+.MuiInputLabel-root {
+  color: #cccccc !important;
+}
+
+.MuiInputBase-input {
+  color: #ffffff !important;
+}
+
+.MuiOutlinedInput-notchedOutline {
+  border-color: #666666 !important;
+}
+
+.MuiOutlinedInput-root:hover .MuiOutlinedInput-notchedOutline {
+  border-color: #999999 !important;
+}
+
+.MuiOutlinedInput-root.Mui-focused .MuiOutlinedInput-notchedOutline {
+  border-color: #e50914 !important;
+}
+
+.MuiTableCell-head {
+  background-color: #141414 !important;
+  color: #cccccc !important;
+  font-weight: bold !important;
+  border-bottom: 2px solid #333 !important;
+}
+
+.MuiTableCell-body {
+  color: #ffffff !important;
+  border-bottom: 1px solid #333 !important;
+}
+
+.MuiTableRow-root:hover {
+  background-color: #222222 !important;
+}
+
+.MuiButton-containedPrimary {
+  background-color: #e50914 !important;
+}
+
+.MuiButton-containedPrimary:hover {
+  background-color: #f40612 !important;
+}
+
+.MuiLinearProgress-bar {
+  background-color: #e50914 !important;
+}
+
+.MuiCircularProgress-root {
+  color: #e50914 !important;
+}
+

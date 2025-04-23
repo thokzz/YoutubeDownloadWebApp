@@ -1,0 +1,577 @@
+// /scripts/downloaderapp/frontend/src/pages/Dashboard.js
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { 
+  Container, Box, Typography, TextField, Button, Paper, Grid, 
+  AppBar, Toolbar, IconButton, Menu, MenuItem, LinearProgress,
+  Dialog, DialogTitle, DialogContent, DialogContentText, DialogActions,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Tooltip, Chip
+} from '@mui/material';
+import { 
+  AccountCircle, History as HistoryIcon, Group as GroupIcon,
+  Add as AddIcon, Delete as DeleteIcon, Info as InfoIcon
+} from '@mui/icons-material';
+import { motion } from 'framer-motion';
+import { startDownloads, getDownloadStatus, cancelDownload } from '../services/api';
+
+const Dashboard = ({ isAdmin, onLogout }) => {
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [urls, setUrls] = useState(['']);
+  const [targetPaths, setTargetPaths] = useState(['']);
+  const [fileNames, setFileNames] = useState(['']);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [activeDownloads, setActiveDownloads] = useState([]);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [openDialog, setOpenDialog] = useState(false);
+  
+  const user = localStorage.getItem('authToken') ? 
+    JSON.parse(atob(localStorage.getItem('authToken').split('.')[1])) : null;
+
+  useEffect(() => {
+    // Poll for active downloads status
+    if (activeDownloads.length > 0) {
+      const interval = setInterval(() => {
+        updateDownloadStatus();
+      }, 2000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [activeDownloads]);
+
+  const updateDownloadStatus = async () => {
+    try {
+      const updatedDownloads = [...activeDownloads];
+      let allCompleted = true;
+      
+      for (let i = 0; i < updatedDownloads.length; i++) {
+        const download = updatedDownloads[i];
+        if (download.status !== 'completed' && download.status !== 'failed' && download.status !== 'cancelled') {
+          const response = await getDownloadStatus(download.id);
+          updatedDownloads[i] = { ...download, ...response.data };
+          
+          if (response.data.status !== 'completed' && response.data.status !== 'failed' && response.data.status !== 'cancelled') {
+            allCompleted = false;
+          }
+        }
+      }
+      
+      setActiveDownloads(updatedDownloads);
+      
+      if (allCompleted && updatedDownloads.length > 0) {
+        setIsDownloading(false);
+        setSuccessMessage('All downloads completed!');
+        setTimeout(() => setSuccessMessage(''), 5000);
+      }
+    } catch (error) {
+      console.error('Error updating download status:', error);
+    }
+  };
+
+  const handleMenu = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleUrlChange = (index, value) => {
+    const newUrls = [...urls];
+    newUrls[index] = value;
+    setUrls(newUrls);
+  };
+
+  const handleTargetPathChange = (index, value) => {
+    const newPaths = [...targetPaths];
+    newPaths[index] = value;
+    setTargetPaths(newPaths);
+  };
+
+  const handleFileNameChange = (index, value) => {
+    const newFileNames = [...fileNames];
+    newFileNames[index] = value;
+    setFileNames(newFileNames);
+  };
+
+  const addRow = () => {
+    if (urls.length < 5) {
+      setUrls([...urls, '']);
+      setTargetPaths([...targetPaths, '']);
+      setFileNames([...fileNames, '']);
+    }
+  };
+
+  const removeRow = (index) => {
+    const newUrls = [...urls];
+    const newPaths = [...targetPaths];
+    const newFileNames = [...fileNames];
+    
+    newUrls.splice(index, 1);
+    newPaths.splice(index, 1);
+    newFileNames.splice(index, 1);
+    
+    setUrls(newUrls);
+    setTargetPaths(newPaths);
+    setFileNames(newFileNames);
+  };
+
+  const handleDownload = async () => {
+    setError('');
+    setSuccessMessage('');
+    
+    const validRows = urls.map((url, index) => ({
+      url,
+      targetPath: targetPaths[index],
+      fileName: fileNames[index]
+    })).filter(row => row.url && row.targetPath);
+    
+    if (validRows.length === 0) {
+      setError('Please enter at least one URL with a target path');
+      return;
+    }
+    
+    try {
+      setIsDownloading(true);
+      
+      // Prepare paths for the backend
+      const downloadUrls = validRows.map(row => row.url);
+      const downloadPaths = validRows.map(row => {
+        // Construct the final path by combining target path and filename (if provided)
+        // Ensure path doesn't end with trailing slash
+        const path = row.targetPath.endsWith('/') ? row.targetPath.slice(0, -1) : row.targetPath;
+        
+        // If filename is provided, append it to the path
+        if (row.fileName && row.fileName.trim()) {
+          return `${path}/${row.fileName.trim()}.mp4`;
+        }
+        // Otherwise just use the path (backend will append original filename)
+        return path;
+      });
+      
+      const response = await startDownloads(downloadUrls, downloadPaths);
+      
+      const downloadIds = response.data.download_ids;
+      const newActiveDownloads = downloadIds.map((id, index) => ({
+        id,
+        url: downloadUrls[index],
+        target_path: downloadPaths[index],
+        file_name: validRows[index].fileName || 'Original',
+        status: 'queued',
+        progress: 0,
+        timestamp: new Date().toISOString(),
+        aspect_ratio: 'Unknown' // Will be updated after download
+      }));
+      
+      setActiveDownloads(prev => [...newActiveDownloads, ...prev]);
+      
+      // Clear form after successful submission
+      setUrls(['']);
+      setTargetPaths(['']);
+      setFileNames(['']);
+      setShowAddForm(false);
+    } catch (error) {
+      setError(error.response?.data?.message || 'Failed to start download');
+      setIsDownloading(false);
+    }
+  };
+
+  const handleCancelDownload = async (downloadId) => {
+    try {
+      await cancelDownload(downloadId);
+      updateDownloadStatus();
+    } catch (error) {
+      console.error('Error cancelling download:', error);
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'completed':
+        return 'success';
+      case 'failed':
+        return 'error';
+      case 'cancelled':
+        return 'warning';
+      case 'downloading':
+      case 'processing':
+      case 'moving':
+        return 'info';
+      default:
+        return 'default';
+    }
+  };
+
+  const getStatusText = (status) => {
+    switch (status) {
+      case 'queued':
+        return 'Queued';
+      case 'downloading':
+        return 'Downloading';
+      case 'processing':
+        return 'Processing';
+      case 'moving':
+        return 'Moving File';
+      case 'completed':
+        return 'Completed';
+      case 'failed':
+        return 'Failed';
+      case 'cancelled':
+        return 'Cancelled';
+      default:
+        return status;
+    }
+  };
+
+  const formatTimestamp = (timestamp) => {
+    if (!timestamp) return 'N/A';
+    const date = new Date(timestamp);
+    return date.toLocaleString();
+  };
+
+  const handleOpenDialog = () => {
+    setOpenDialog(true);
+  };
+
+  const handleCloseDialog = () => {
+    setOpenDialog(false);
+  };
+
+  const toggleAddForm = () => {
+    setShowAddForm(!showAddForm);
+  };
+
+  const getPathAndFilename = (fullPath) => {
+    if (!fullPath) return { path: '', filename: '' };
+    
+    // Check if the path ends with .mp4
+    if (fullPath.endsWith('.mp4')) {
+      const lastSlashIndex = fullPath.lastIndexOf('/');
+      if (lastSlashIndex !== -1) {
+        const path = fullPath.substring(0, lastSlashIndex);
+        const filename = fullPath.substring(lastSlashIndex + 1, fullPath.length - 4); // Remove .mp4
+        return { path, filename };
+      }
+    }
+    
+    return { path: fullPath, filename: 'Original' };
+  };
+
+  return (
+    <Box sx={{ flexGrow: 1 }}>
+      <AppBar position="static" sx={{ backgroundColor: '#2ea3f2' }}>
+        <Toolbar>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            Video Downloader
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Button color="inherit" component={Link} to="/history" startIcon={<HistoryIcon />}>
+              History
+            </Button>
+            {isAdmin && (
+              <Button color="inherit" component={Link} to="/users" startIcon={<GroupIcon />}>
+                Users
+              </Button>
+            )}
+            <IconButton
+              size="large"
+              aria-label="account of current user"
+              aria-controls="menu-appbar"
+              aria-haspopup="true"
+              onClick={handleMenu}
+              color="inherit"
+            >
+              <AccountCircle />
+            </IconButton>
+            <Menu
+              id="menu-appbar"
+              anchorEl={anchorEl}
+              anchorOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+              keepMounted
+              transformOrigin={{
+                vertical: 'top',
+                horizontal: 'right',
+              }}
+              open={Boolean(anchorEl)}
+              onClose={handleClose}
+            >
+              {user && <MenuItem disabled>{user.username}</MenuItem>}
+              <MenuItem onClick={onLogout}>Logout</MenuItem>
+            </Menu>
+          </Box>
+        </Toolbar>
+      </AppBar>
+
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+        >
+          <Paper sx={{ p: 3, mb: 4 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h5" component="h2">
+                Video Downloads
+              </Typography>
+              <Box>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<AddIcon />}
+                  onClick={toggleAddForm}
+                  sx={{ mr: 1 }}
+                >
+                  {showAddForm ? 'Hide Form' : 'Add Download'}
+                </Button>
+                <Button size="small" color="primary" onClick={handleOpenDialog}>
+                  Help
+                </Button>
+              </Box>
+            </Box>
+
+            {error && (
+              <Typography color="error" sx={{ mb: 2 }}>
+                {error}
+              </Typography>
+            )}
+
+            {successMessage && (
+              <Typography color="success.main" sx={{ mb: 2 }}>
+                {successMessage}
+              </Typography>
+            )}
+
+            {showAddForm && (
+              <Box sx={{ mb: 4, p: 2, bgcolor: 'background.paper', borderRadius: 1, border: '1px dashed #ccc' }}>
+                <Typography variant="h6" gutterBottom>
+                  Add New Downloads
+                </Typography>
+                <Typography variant="body2" color="text.secondary" paragraph>
+                  Enter URLs from YouTube, TikTok, or Facebook (maximum 5 at a time).
+                </Typography>
+                
+                {urls.map((url, index) => (
+                  <Grid container spacing={2} key={index} sx={{ mb: 2 }}>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        label="Video URL"
+                        variant="outlined"
+                        value={url}
+                        onChange={(e) => handleUrlChange(index, e.target.value)}
+                        disabled={isDownloading}
+                        placeholder="Enter YouTube, TikTok, or Facebook URL"
+                        size="small"
+                        required
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={3}>
+                      <TextField
+                        fullWidth
+                        label="Target Path"
+                        variant="outlined"
+                        value={targetPaths[index]}
+                        onChange={(e) => handleTargetPathChange(index, e.target.value)}
+                        disabled={isDownloading}
+                        placeholder="e.g., videos/youtube"
+                        size="small"
+                        required
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={4}>
+                      <TextField
+                        fullWidth
+                        label="File Name"
+                        variant="outlined"
+                        value={fileNames[index]}
+                        onChange={(e) => handleFileNameChange(index, e.target.value)}
+                        disabled={isDownloading}
+                        placeholder="Leave blank to keep original name"
+                        size="small"
+                        helperText=".mp4 will be added automatically"
+                      />
+                    </Grid>
+                    <Grid item xs={12} md={1} sx={{ display: 'flex', alignItems: 'center' }}>
+                      {index > 0 && (
+                        <IconButton color="error" onClick={() => removeRow(index)} disabled={isDownloading}>
+                          <DeleteIcon />
+                        </IconButton>
+                      )}
+                    </Grid>
+                  </Grid>
+                ))}
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+                  <Button
+                    variant="outlined"
+                    onClick={addRow}
+                    disabled={isDownloading || urls.length >= 5}
+                    startIcon={<AddIcon />}
+                  >
+                    Add Another URL
+                  </Button>
+                  
+                  <Button 
+                    variant="contained" 
+                    color="primary" 
+                    onClick={handleDownload} 
+                    disabled={isDownloading} 
+                  >
+                    {isDownloading ? 'Downloading...' : 'Start Downloads'}
+                  </Button>
+                </Box>
+              </Box>
+            )}
+
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>URL</TableCell>
+                    <TableCell>Target Path</TableCell>
+                    <TableCell>File Name</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Timestamp</TableCell>
+                    <TableCell>Aspect Ratio</TableCell>
+                    <TableCell>Actions</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {activeDownloads.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} align="center">
+                        <Typography variant="body2" color="text.secondary" sx={{ py: 3 }}>
+                          No downloads yet. Click "Add Download" to get started.
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    activeDownloads.map((download) => {
+                      const { path, filename } = getPathAndFilename(download.target_path);
+                      
+                      return (
+                        <TableRow key={download.id}>
+                          <TableCell>
+                            <Tooltip title={download.url}>
+                              <Typography variant="body2" noWrap sx={{ maxWidth: 150 }}>
+                                {download.url}
+                              </Typography>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip title={path}>
+                              <Typography variant="body2" noWrap sx={{ maxWidth: 150 }}>
+                                {path}
+                              </Typography>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell>
+                            {download.file_name || filename}
+                            <Typography variant="caption" color="text.secondary">
+                              {(download.file_name || filename) !== 'Original' ? '.mp4' : ''}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
+                                <Chip 
+                                  label={getStatusText(download.status)} 
+                                  size="small" 
+                                  color={getStatusColor(download.status)} 
+                                  sx={{ mr: 1 }}
+                                />
+                              </Box>
+                              {['downloading', 'processing', 'queued', 'moving'].includes(download.status) && (
+                                <LinearProgress 
+                                  variant={download.progress < 0 ? "indeterminate" : "determinate"} 
+                                  value={download.progress < 0 ? 0 : download.progress} 
+                                  sx={{ height: 6, borderRadius: 3, width: '100%' }}
+                                />
+                              )}
+                            </Box>
+                          </TableCell>
+                          <TableCell>{formatTimestamp(download.timestamp)}</TableCell>
+                          <TableCell>{download.aspect_ratio || 'Unknown'}</TableCell>
+                          <TableCell>
+                            {(['queued', 'downloading', 'processing'].includes(download.status)) && (
+                              <Button 
+                                variant="outlined" 
+                                color="error" 
+                                size="small"
+                                onClick={() => handleCancelDownload(download.id)}
+                              >
+                                Cancel
+                              </Button>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Paper>
+        </motion.div>
+      </Container>
+
+      <Dialog open={openDialog} onClose={handleCloseDialog}>
+        <DialogTitle>Download Help</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            To download videos, you need to provide:
+          </DialogContentText>
+          
+          <Typography variant="subtitle1" sx={{ mt: 2, fontWeight: 'bold' }}>
+            1. Video URL (Required)
+          </Typography>
+          <Box sx={{ mt: 1, mb: 1, p: 2, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+            <Typography variant="body2" fontFamily="monospace">
+              https://www.youtube.com/watch?v=example
+            </Typography>
+          </Box>
+          <DialogContentText sx={{ mb: 2 }}>
+            The URL of the video you want to download from YouTube, TikTok, or Facebook.
+          </DialogContentText>
+          
+          <Typography variant="subtitle1" sx={{ mt: 2, fontWeight: 'bold' }}>
+            2. Target Path (Required)
+          </Typography>
+          <Box sx={{ mt: 1, mb: 1, p: 2, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+            <Typography variant="body2" fontFamily="monospace">
+              videos/youtube
+            </Typography>
+          </Box>
+          <DialogContentText sx={{ mb: 2 }}>
+            The directory where you want to save the video (under /mnt/VOLUMEPATH/).
+          </DialogContentText>
+          
+          <Typography variant="subtitle1" sx={{ mt: 2, fontWeight: 'bold' }}>
+            3. File Name (Optional)
+          </Typography>
+          <Box sx={{ mt: 1, mb: 1, p: 2, backgroundColor: '#f5f5f5', borderRadius: 1 }}>
+            <Typography variant="body2" fontFamily="monospace">
+              my-custom-video-name
+            </Typography>
+          </Box>
+          <DialogContentText>
+            If provided, this will be used as the name for the downloaded file, with .mp4 extension automatically added.
+            If left blank, the original filename from the source will be used.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDialog} color="primary">
+            OK
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Box>
+  );
+};
+
+export default Dashboard;
